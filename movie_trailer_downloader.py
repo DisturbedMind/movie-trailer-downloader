@@ -20,6 +20,8 @@ FFmpeg is strongly recommended for best-quality video+audio merges:
 from __future__ import annotations
 
 import argparse
+from ast import arguments
+import importlib.util
 import json
 import queue
 import random
@@ -72,6 +74,7 @@ def default_js_runtime_setting() -> str:
 
 
 SETTINGS_PATH = Path(__file__).with_suffix(".settings.json")
+INSTALLER_PATH = Path(__file__).with_name("install.ps1")
 DEFAULT_COOKIES_PATH = Path(__file__).with_name("youtube-cookies.txt")
 DEFAULT_RESULTS_PATH = Path(__file__).with_name("trailer-results.json")
 DEFAULT_SEARCH_DELAY = 2.0
@@ -79,6 +82,7 @@ DEFAULT_MOVIE_DELAY = 5.0
 DEFAULT_DOWNLOAD_SLEEP_MIN = 3.0
 DEFAULT_DOWNLOAD_SLEEP_MAX = 8.0
 DEFAULT_CANDIDATE_ATTEMPTS = 5
+MIN_PYTHON_VERSION = (3, 14)
 DEFAULT_FFMPEG_THREADS = 2
 DEFAULT_FFMPEG_PRESET = "veryfast"
 DEFAULT_FFMPEG_CRF = 22
@@ -141,6 +145,40 @@ def require_yt_dlp() -> None:
         print("Install it with: python -m pip install -U yt-dlp", file=sys.stderr)
         raise SystemExit(2)
     yt_dlp = yt_dlp_module
+
+
+def dependency_status() -> list[tuple[str, bool, str]]:
+    python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    python_ok = sys.version_info >= MIN_PYTHON_VERSION
+    status = [("Python 3.14+", python_ok, python_version)]
+    status.append(("yt-dlp", importlib.util.find_spec("yt_dlp") is not None, "python package yt-dlp[default]"))
+
+    ffmpeg = shutil.which("ffmpeg")
+    status.append(("FFmpeg", bool(ffmpeg), ffmpeg or "required for MP4 conversion and audio normalization"))
+
+    deno = shutil.which("deno")
+    node = shutil.which("node")
+    deno_ok = bool(deno and command_version_at_least(deno, ["--version"], (2, 3)))
+    node_ok = bool(node and command_version_at_least(node, ["--version"], (22, 0)))
+    js_detail = []
+    if deno:
+        js_detail.append(f"Deno {'OK' if deno_ok else 'too old'}")
+    if node:
+        js_detail.append(f"Node {'OK' if node_ok else 'too old'}")
+    status.append(("YouTube EJS runtime", deno_ok or node_ok, ", ".join(js_detail) or "install Deno 2.3+ or Node.js 22+"))
+    status.append(("Installer", INSTALLER_PATH.exists(), str(INSTALLER_PATH)))
+    return status
+
+
+def missing_dependency_names() -> list[str]:
+    return [name for name, ok, _detail in dependency_status() if not ok and name != "Installer"]
+
+
+def print_dependency_status() -> None:
+    print("Dependency check:")
+    for name, ok, detail in dependency_status():
+        marker = "OK" if ok else "MISSING"
+        print(f"  {marker:7} {name}: {detail}")
 
 
 def is_cookie_decrypt_error(exc: Exception) -> bool:
@@ -655,6 +693,21 @@ def run_ffmpeg(command: list[str]) -> None:
         raise RuntimeError(details[-1200:] if details else f"ffmpeg exited with code {result.returncode}")
 
 
+def install_dependencies() -> int:
+    if not INSTALLER_PATH.exists():
+        print(f"Installer not found: {INSTALLER_PATH}")
+        return 1
+    command = [
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        str(INSTALLER_PATH),
+    ]
+    return subprocess.call(command)
+
+
 def convert_to_normalized_mp4(
     source: Path,
     output: Path,
@@ -974,6 +1027,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description="Download best-quality free/public movie trailers into movie folders."
     )
     parser.add_argument("--gui", action="store_true", help="Open the graphical interface.")
+    arguments("--check-deps", action="store_true", help="Check required external tools and Python packages, then exit.")
+    parser.add_argument("--install-deps", action="store_true", help="Run the bundled Windows install.ps1 dependency bootstrapper, then exit.")
+
     parser.add_argument("--root", default=r"C:\movies", help=r"Movie library root. Default: C:\movies")
     parser.add_argument(
         "--max-per-movie",
@@ -1656,11 +1712,68 @@ def launch_gui() -> int:
 
         threading.Thread(target=target, daemon=True).start()
 
+
+    def dependency_worker() -> None:
+        if running_var.get():
+            return
+        missing = missing_dependency_names()
+        status_lines = [f"{'OK' if ok else 'MISSING'} - {name}: {detail}" for name, ok, detail in dependency_status()]
+        if not missing:
+            messagebox.showinfo("Dependencies", "All required dependencies look ready.\n\n" + "\n".join(status_lines))
+            return
+        if not INSTALLER_PATH.exists():
+            messagebox.showerror("Installer missing", f"Could not find {INSTALLER_PATH}")
+            return
+        answer = messagebox.askyesno(
+            "Install dependencies",
+            "Missing dependencies were found:\n\n"
+            + "\n".join(status_lines)
+            + "\n\nRun install.ps1 now? Windows may ask for administrator approval.",
+        )
+        if not answer:
+            return
+
+        notebook.select(run_tab)
+        log_text.configure(state="normal")
+        log_text.delete("1.0", "end")
+        log_text.configure(state="disabled")
+        progress_var.set(0)
+        progress_text_var.set("Installing dependencies")
+        set_status("Installing dependencies", "warn")
+        running_var.set(True)
+        for button in busy_buttons:
+            button.configure(state="disabled")
+
+        def target() -> None:
+            old_stdout, old_stderr = sys.stdout, sys.stderr
+            writer = QueueWriter(log_queue)
+            sys.stdout = writer
+            sys.stderr = writer
+            try:
+                print_dependency_status()
+                print("\nStarting dependency installer...")
+                exit_code = install_dependencies()
+                print(f"\nInstaller finished with exit code {exit_code}")
+                print("\nUpdated dependency status:")
+                print_dependency_status()
+            except Exception as exc:
+                print(f"\nDependency install failed: {exc}")
+            finally:
+                sys.stdout = old_stdout
+                sys.stderr = old_stderr
+                log_queue.put("__DONE__")
+
+        threading.Thread(target=target, daemon=True).start()
+
     preview_button = ttk.Button(actions, text="Preview", command=lambda: run_worker(True))
     preview_button.grid(row=1, column=0, sticky="w")
     start_button = ttk.Button(actions, text="Download", style="Accent.TButton", command=lambda: run_worker(False))
     start_button.grid(row=1, column=1, sticky="w", padx=(8, 0))
+
     busy_buttons.extend([preview_button, start_button])
+    deps_button = ttk.Button(actions, text="Install / Repair Dependencies", command=dependency_worker)
+    deps_button.grid(row=1, column=2, sticky="w", padx=(8, 0))
+    busy_buttons.extend([preview_button, start_button, deps_button])
     ttk.Label(actions, text="Default skips existing trailers; total re-download is in Settings.", style="Muted.TLabel").grid(
         row=1, column=3, sticky="e"
     )
@@ -1791,6 +1904,12 @@ def launch_gui() -> int:
 def main() -> int:
     parser = build_arg_parser()
     args = parser.parse_args()
+    if args.check_deps:
+        print_dependency_status()
+        return 1 if missing_dependency_names() else 0
+    if args.install_deps:
+        return install_dependencies()
+
     if args.gui or len(sys.argv) == 1:
         return launch_gui()
     return run_cli(args)
