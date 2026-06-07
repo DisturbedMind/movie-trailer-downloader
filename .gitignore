@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.zip
+*.settings.json
+youtube-cookies.txt
+trailer-results.json
+.trailer-download-tmp/
