@@ -60,6 +60,22 @@ Open the GUI:
 
     python movie_trailer_downloader.py --gui
 
+GUI controls:
+
+    Preview
+        Run without downloading or renaming.
+
+    Download
+        Start the trailer scan/download run.
+
+    Install / Repair Dependencies
+        Check and install missing tools with install.ps1.
+
+    Exit / Quit
+        If idle, closes the app. If a download/conversion is active, cancels
+        the current yt-dlp/FFmpeg operation, restores any .old trailer backup,
+        cleans the temp folder, then exits.
+
 Useful options:
 
     --check-deps

@@ -686,11 +686,22 @@ def ffmpeg_path() -> str | None:
     return shutil.which("ffmpeg")
 
 
-def run_ffmpeg(command: list[str]) -> None:
-    result = subprocess.run(command, capture_output=True, text=True)
-    if result.returncode != 0:
-        details = (result.stderr or result.stdout or "").strip()
-        raise RuntimeError(details[-1200:] if details else f"ffmpeg exited with code {result.returncode}")
+def run_ffmpeg(command: list[str], cancel_event: threading.Event | None = None) -> None:
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    while True:
+        try:
+            check_cancel(cancel_event)
+            stdout, stderr = process.communicate(timeout=0.2)
+            break
+        except subprocess.TimeoutExpired:
+            continue
+        except CancelledByUser:
+            process.kill()
+            process.communicate()
+            raise
+    if process.returncode != 0:
+        details = (stderr or stdout or "").strip()
+        raise RuntimeError(details[-1200:] if details else f"ffmpeg exited with code {process.returncode}")
 
 
 def install_dependencies() -> int:
@@ -714,7 +725,9 @@ def convert_to_normalized_mp4(
     threads: int = DEFAULT_FFMPEG_THREADS,
     preset: str = DEFAULT_FFMPEG_PRESET,
     crf: int = DEFAULT_FFMPEG_CRF,
+    cancel_event: threading.Event | None = None,
 ) -> Path:
+    check_cancel(cancel_event)
     ffmpeg = ffmpeg_path()
     if not ffmpeg:
         raise RuntimeError("FFmpeg was not found on PATH. Install it with: winget install Gyan.FFmpeg")
@@ -761,16 +774,20 @@ def convert_to_normalized_mp4(
         "+faststart",
     ]
     try:
-        run_ffmpeg(base_command + ["-af", "loudnorm=I=-16:TP=-1.5:LRA=11", str(output)])
+        run_ffmpeg(base_command + ["-af", "loudnorm=I=-16:TP=-1.5:LRA=11", str(output)], cancel_event)
     except RuntimeError:
         if output.exists():
             output.unlink()
-        run_ffmpeg(base_command + [str(output)])
+        run_ffmpeg(base_command + [str(output)], cancel_event)
 
     return output
 
 
-def download_format_option_sets(base_opts: dict, outtmpl: str) -> list[tuple[str, dict]]:
+def download_format_option_sets(
+    base_opts: dict,
+    outtmpl: str,
+    cancel_event: threading.Event | None = None,
+) -> list[tuple[str, dict]]:
     common_opts = {
         **base_opts,
         "outtmpl": outtmpl,
@@ -779,6 +796,8 @@ def download_format_option_sets(base_opts: dict, outtmpl: str) -> list[tuple[str
         "quiet": True,
         "no_warnings": True,
     }
+    if cancel_event is not None:
+        common_opts["progress_hooks"] = [cancel_progress_hook(cancel_event)]
     return [
         (
             "best available video+audio",
@@ -810,13 +829,16 @@ def download_format_option_sets(base_opts: dict, outtmpl: str) -> list[tuple[str
     ]
 
 
-def run_download_with_retries(opts: dict, url: str) -> None:
+def run_download_with_retries(opts: dict, url: str, cancel_event: threading.Event | None = None) -> None:
+    check_cancel(cancel_event)
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([url])
     except Exception as exc:
+        check_cancel(cancel_event)
         if "cookiesfrombrowser" in opts and is_cookie_decrypt_error(exc):
             print("    browser cookie decrypt failed; retrying download without browser cookies")
+            check_cancel(cancel_event)
             with yt_dlp.YoutubeDL(without_browser_cookies(opts)) as ydl:
                 ydl.download([url])
         elif is_forbidden_error(exc):
@@ -825,6 +847,7 @@ def run_download_with_retries(opts: dict, url: str) -> None:
             for label, retry_opts in youtube_retry_option_sets(opts):
                 try:
                     print(f"    YouTube returned 403; retrying download {label}")
+                    check_cancel(cancel_event)
                     with yt_dlp.YoutubeDL(retry_opts) as ydl:
                         ydl.download([url])
                     downloaded_ok = True
@@ -851,7 +874,9 @@ def download_candidate(
     ffmpeg_threads: int = DEFAULT_FFMPEG_THREADS,
     ffmpeg_preset: str = DEFAULT_FFMPEG_PRESET,
     ffmpeg_crf: int = DEFAULT_FFMPEG_CRF,
+    cancel_event: threading.Event | None = None,
 ) -> Path | None:
+    check_cancel(cancel_event)
     trailer_stem = f"{movie.display_name}-trailer"
     if dry_run:
         print(f"    would download #{index}: {candidate.title} [{candidate.channel}]")
@@ -859,7 +884,7 @@ def download_candidate(
         return None
 
     outtmpl = str(temp_dir / f"{trailer_stem}.%(ext)s")
-    format_profiles = download_format_option_sets(ydl_base_opts, outtmpl)
+    format_profiles = download_format_option_sets(ydl_base_opts, outtmpl, cancel_event)
     last_error: Exception | None = None
     tried_ejs_recovery = False
     print(f"    trying #{index}: {candidate.title}")
@@ -868,10 +893,11 @@ def download_candidate(
         if profile_index > 1:
             print(f"    retrying #{index} with {label}")
         try:
-            run_download_with_retries(opts, candidate.url)
+            run_download_with_retries(opts, candidate.url, cancel_event)
             last_error = None
             break
         except Exception as exc:
+            check_cancel(cancel_event)
             last_error = exc
             if is_format_unavailable_error(exc) and not tried_ejs_recovery:
                 tried_ejs_recovery = True
@@ -880,7 +906,7 @@ def download_candidate(
                     clean_temp_dir(temp_dir)
                     print(f"    retrying #{index} with {ejs_label}")
                     try:
-                        run_download_with_retries(ejs_opts, candidate.url)
+                        run_download_with_retries(ejs_opts, candidate.url, cancel_event)
                         last_error = None
                         recovered = True
                         break
@@ -919,6 +945,7 @@ def download_candidate(
             threads=ffmpeg_threads,
             preset=ffmpeg_preset,
             crf=ffmpeg_crf,
+            cancel_event=cancel_event,
         )
         shutil.move(str(converted), str(target))
     except Exception as exc:
@@ -930,6 +957,8 @@ def download_candidate(
 
 
 def process_movie(movie: MovieFolder, args: argparse.Namespace, ydl_base_opts: dict, results: dict | None = None) -> bool:
+    cancel_event = getattr(args, "cancel_event", None)
+    check_cancel(cancel_event)
     setattr(args, "_last_movie_used_network", False)
     print(f"\n== {movie.display_name} ==")
     stale_backups = delete_old_trailer_backups(movie, args.dry_run)
@@ -978,6 +1007,7 @@ def process_movie(movie: MovieFolder, args: argparse.Namespace, ydl_base_opts: d
     temp_dir = movie.folder / ".trailer-download-tmp"
     for index, candidate in enumerate(candidates[:candidate_attempts], start=1):
         try:
+            check_cancel(cancel_event)
             target = download_candidate(
                 movie,
                 candidate,
@@ -988,7 +1018,17 @@ def process_movie(movie: MovieFolder, args: argparse.Namespace, ydl_base_opts: d
                 ffmpeg_threads=int(getattr(args, "ffmpeg_threads", DEFAULT_FFMPEG_THREADS)),
                 ffmpeg_preset=str(getattr(args, "ffmpeg_preset", DEFAULT_FFMPEG_PRESET)),
                 ffmpeg_crf=int(getattr(args, "ffmpeg_crf", DEFAULT_FFMPEG_CRF)),
+                cancel_event=cancel_event,
             )
+        except CancelledByUser:
+            print("    cancel requested; stopping current movie")
+            if renamed and not args.dry_run:
+                restored = restore_renamed_trailers(renamed)
+                for backup, original in restored:
+                    print(f"    restored previous trailer after cancel: {backup.name} -> {original.name}")
+            if temp_dir.exists() and not args.keep_temp and not args.dry_run:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            raise
         except Exception as exc:
             if is_format_unavailable_error(exc):
                 print(f"    skipped #{index}: no downloadable video format; trying next candidate")
@@ -1027,7 +1067,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description="Download best-quality free/public movie trailers into movie folders."
     )
     parser.add_argument("--gui", action="store_true", help="Open the graphical interface.")
-    arguments("--check-deps", action="store_true", help="Check required external tools and Python packages, then exit.")
+    parser.add_argument("--check-deps", action="store_true", help="Check required external tools and Python packages, then exit.")
     parser.add_argument("--install-deps", action="store_true", help="Run the bundled Windows install.ps1 dependency bootstrapper, then exit.")
 
     parser.add_argument("--root", default=r"C:\movies", help=r"Movie library root. Default: C:\movies")
@@ -1166,7 +1206,12 @@ def run_cli(args: argparse.Namespace) -> int:
         progress_callback(0, len(movies), "Starting")
     movie_delay = float(getattr(args, "movie_delay", DEFAULT_MOVIE_DELAY))
     for index, movie in enumerate(movies, start=1):
-        changed = process_movie(movie, args, ydl_base_opts, results)
+        try:
+            check_cancel(getattr(args, "cancel_event", None))
+            changed = process_movie(movie, args, ydl_base_opts, results)
+        except CancelledByUser:
+            print("\nRun cancelled by user")
+            return 130
         if changed or not args.dry_run:
             save_results(results_file, results)
         if progress_callback:
@@ -1227,6 +1272,22 @@ class QueueWriter:
 
     def flush(self) -> None:
         return None
+
+
+class CancelledByUser(Exception):
+    pass
+
+
+def check_cancel(cancel_event: threading.Event | None) -> None:
+    if cancel_event is not None and cancel_event.is_set():
+        raise CancelledByUser("Cancelled by user")
+
+
+def cancel_progress_hook(cancel_event: threading.Event | None):
+    def hook(_status: dict) -> None:
+        check_cancel(cancel_event)
+
+    return hook
 
 
 def launch_gui() -> int:
@@ -1332,6 +1393,8 @@ def launch_gui() -> int:
     cookie_summary_var = tk.StringVar(value="cookies file" if Path(cookies_file_var.get()).exists() else "public search")
     mode_summary_var = tk.StringVar(value="skip existing trailers")
     running_var = tk.BooleanVar(value=False)
+    cancel_event = threading.Event()
+    quit_after_cancel = {"value": False}
     log_queue: queue.Queue[object] = queue.Queue()
     busy_buttons: list[ttk.Button] = []
 
@@ -1462,8 +1525,8 @@ def launch_gui() -> int:
 
     actions = ttk.Frame(run_tab, style="Panel.TFrame", padding=14)
     actions.grid(row=1, column=0, sticky="ew", pady=(12, 8))
-    actions.columnconfigure(3, weight=1)
-    ttk.Label(actions, text="Run controls", style="CardTitle.TLabel").grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 10))
+    actions.columnconfigure(4, weight=1)
+    ttk.Label(actions, text="Run controls", style="CardTitle.TLabel").grid(row=0, column=0, columnspan=5, sticky="w", pady=(0, 10))
 
     log_panel = ttk.Frame(run_tab, style="Panel.TFrame", padding=14)
     log_panel.grid(row=2, column=0, sticky="nsew")
@@ -1608,13 +1671,25 @@ def launch_gui() -> int:
                 item = log_queue.get_nowait()
             except queue.Empty:
                 break
+            done_state = None
             if item == "__DONE__":
+                done_state = "finished"
+            elif isinstance(item, tuple) and len(item) == 2 and item[0] == "__DONE__":
+                done_state = str(item[1])
+
+            if done_state:
                 running_var.set(False)
                 for button in busy_buttons:
                     button.configure(state="normal")
-                progress_var.set(100)
-                set_status("Finished", "good")
+                if done_state == "cancelled":
+                    progress_text_var.set("Cancelled")
+                    set_status("Cancelled", "warn")
+                else:
+                    progress_var.set(100)
+                    set_status("Finished", "good")
                 update_summary()
+                if quit_after_cancel["value"]:
+                    root.after(50, root.destroy)
             elif isinstance(item, tuple) and len(item) == 4 and item[0] == "__PROGRESS__":
                 _kind, current, total, label = item
                 percent = 0 if not total else (float(current) / float(total)) * 100
@@ -1647,6 +1722,9 @@ def launch_gui() -> int:
         progress_var.set(0)
         progress_text_var.set("Preparing")
         set_status("Running", "accent_dark")
+        cancel_event.clear()
+        quit_after_cancel["value"] = False
+        current["cancel_event"] = cancel_event
         running_var.set(True)
         for button in busy_buttons:
             button.configure(state="disabled")
@@ -1656,17 +1734,25 @@ def launch_gui() -> int:
             writer = QueueWriter(log_queue)
             sys.stdout = writer
             sys.stderr = writer
+            done_state = "finished"
             try:
                 args = argparse.Namespace(**current)
-                run_cli(args)
+                exit_code = run_cli(args)
+                if exit_code == 130:
+                    done_state = "cancelled"
             except SystemExit as exc:
                 print(f"\nStopped with exit code {exc.code}")
+                if exc.code == 130:
+                    done_state = "cancelled"
+            except CancelledByUser:
+                print("\nRun cancelled by user")
+                done_state = "cancelled"
             except Exception as exc:
                 print(f"\nError: {exc}")
             finally:
                 sys.stdout = old_stdout
                 sys.stderr = old_stderr
-                log_queue.put("__DONE__")
+                log_queue.put(("__DONE__", done_state))
 
         threading.Thread(target=target, daemon=True).start()
 
@@ -1765,22 +1851,32 @@ def launch_gui() -> int:
 
         threading.Thread(target=target, daemon=True).start()
 
+    def exit_or_cancel() -> None:
+        if running_var.get():
+            quit_after_cancel["value"] = True
+            cancel_event.set()
+            set_status("Cancelling", "warn")
+            progress_text_var.set("Cancelling current download")
+            log_queue.put("\nCancel requested; stopping active download/conversion...\n")
+            return
+        root.destroy()
+
     preview_button = ttk.Button(actions, text="Preview", command=lambda: run_worker(True))
     preview_button.grid(row=1, column=0, sticky="w")
     start_button = ttk.Button(actions, text="Download", style="Accent.TButton", command=lambda: run_worker(False))
     start_button.grid(row=1, column=1, sticky="w", padx=(8, 0))
-
-    busy_buttons.extend([preview_button, start_button])
     deps_button = ttk.Button(actions, text="Install / Repair Dependencies", command=dependency_worker)
     deps_button.grid(row=1, column=2, sticky="w", padx=(8, 0))
+    quit_button = ttk.Button(actions, text="Exit / Quit", style="Danger.TButton", command=exit_or_cancel)
+    quit_button.grid(row=1, column=3, sticky="w", padx=(8, 0))
     busy_buttons.extend([preview_button, start_button, deps_button])
     ttk.Label(actions, text="Default skips existing trailers; total re-download is in Settings.", style="Muted.TLabel").grid(
-        row=1, column=3, sticky="e"
+        row=1, column=4, sticky="e"
     )
     progress_bar = ttk.Progressbar(actions, variable=progress_var, mode="determinate", maximum=100)
-    progress_bar.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(14, 4))
+    progress_bar.grid(row=2, column=0, columnspan=5, sticky="ew", pady=(14, 4))
     ttk.Label(actions, textvariable=progress_text_var, style="Muted.TLabel").grid(
-        row=3, column=0, columnspan=4, sticky="ew"
+        row=3, column=0, columnspan=5, sticky="ew"
     )
 
     search_panel = panel(settings_body, row=0, column=0, sticky="nsew", padx=(0, 8), pady=(0, 12))
