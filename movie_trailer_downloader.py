@@ -1299,19 +1299,22 @@ def launch_gui() -> int:
         return 2
 
     palette = {
-        "bg": "#0f172a",
-        "surface": "#111827",
-        "panel": "#172033",
-        "panel_alt": "#0b1220",
-        "border": "#26364f",
-        "text": "#e5edf5",
-        "muted": "#93a4b7",
-        "accent": "#38bdf8",
-        "accent_dark": "#0e7490",
-        "good": "#22c55e",
+        "bg": "#667eea",
+        "bg_alt": "#764ba2",
+        "nav": "#2c3e50",
+        "surface": "#eef2ff",
+        "panel": "#f8fafc",
+        "panel_alt": "#ffffff",
+        "border": "#d8dee9",
+        "text": "#243447",
+        "muted": "#60758a",
+        "accent": "#3498db",
+        "accent_dark": "#2980b9",
+        "good": "#198754",
         "warn": "#f59e0b",
-        "danger": "#ef4444",
-        "input": "#0b1220",
+        "danger": "#e74c3c",
+        "danger_dark": "#c0392b",
+        "input": "#ffffff",
     }
 
     settings = load_gui_settings()
@@ -1328,39 +1331,40 @@ def launch_gui() -> int:
         pass
     style.configure(".", font=("Segoe UI", 10), background=palette["bg"], foreground=palette["text"])
     style.configure("App.TFrame", background=palette["bg"])
-    style.configure("Panel.TFrame", background=palette["panel"], relief="flat")
+    style.configure("Nav.TFrame", background=palette["nav"])
+    style.configure("Panel.TFrame", background=palette["panel_alt"], relief="flat", borderwidth=1)
     style.configure("Subtle.TFrame", background=palette["surface"], relief="flat")
-    style.configure("Row.TFrame", background=palette["panel"])
-    style.configure("TLabel", background=palette["panel"], foreground=palette["text"])
-    style.configure("Muted.TLabel", background=palette["panel"], foreground=palette["muted"])
-    style.configure("Header.TLabel", background=palette["bg"], foreground=palette["text"], font=("Segoe UI Semibold", 20))
-    style.configure("Subheader.TLabel", background=palette["bg"], foreground=palette["muted"], font=("Segoe UI", 10))
-    style.configure("CardTitle.TLabel", background=palette["panel"], foreground=palette["text"], font=("Segoe UI Semibold", 11))
-    style.configure("Value.TLabel", background=palette["panel"], foreground=palette["text"], font=("Segoe UI Semibold", 13))
-    style.configure("Tiny.TLabel", background=palette["panel"], foreground=palette["muted"], font=("Segoe UI", 9))
-    style.configure("TButton", padding=(12, 8), borderwidth=0)
-    style.map("TButton", background=[("active", palette["border"])], foreground=[("disabled", palette["muted"])])
+    style.configure("Row.TFrame", background=palette["panel_alt"])
+    style.configure("TLabel", background=palette["panel_alt"], foreground=palette["text"])
+    style.configure("Muted.TLabel", background=palette["panel_alt"], foreground=palette["muted"])
+    style.configure("Header.TLabel", background=palette["nav"], foreground="#ffffff", font=("Segoe UI Semibold", 20))
+    style.configure("Subheader.TLabel", background=palette["nav"], foreground="#dbeafe", font=("Segoe UI", 10))
+    style.configure("CardTitle.TLabel", background=palette["panel_alt"], foreground=palette["text"], font=("Segoe UI Semibold", 11))
+    style.configure("Value.TLabel", background=palette["panel_alt"], foreground=palette["accent"], font=("Segoe UI Semibold", 18))
+    style.configure("Tiny.TLabel", background=palette["panel_alt"], foreground=palette["muted"], font=("Segoe UI", 9))
+    style.configure("TButton", background=palette["accent"], foreground="#ffffff", padding=(12, 8), borderwidth=0)
+    style.map("TButton", background=[("active", palette["accent_dark"]), ("disabled", palette["border"])], foreground=[("disabled", palette["muted"])])
     style.configure("Accent.TButton", background=palette["accent_dark"], foreground="#ecfeff", padding=(14, 9))
-    style.map("Accent.TButton", background=[("active", "#0891b2"), ("disabled", palette["border"])])
-    style.configure("Danger.TButton", background="#7f1d1d", foreground="#fee2e2", padding=(12, 8))
-    style.map("Danger.TButton", background=[("active", "#991b1b")])
-    style.configure("TEntry", fieldbackground=palette["input"], foreground=palette["text"], bordercolor=palette["border"])
-    style.configure("TCombobox", fieldbackground=palette["input"], foreground=palette["text"], bordercolor=palette["border"])
+    style.map("Accent.TButton", background=[("active", palette["accent"]), ("disabled", palette["border"])])
+    style.configure("Danger.TButton", background=palette["danger"], foreground="#ffffff", padding=(12, 8))
+    style.map("Danger.TButton", background=[("active", palette["danger_dark"])])
+    style.configure("TEntry", fieldbackground=palette["input"], foreground=palette["text"], bordercolor=palette["border"], lightcolor=palette["border"], darkcolor=palette["border"])
+    style.configure("TCombobox", fieldbackground=palette["input"], foreground=palette["text"], bordercolor=palette["border"], lightcolor=palette["border"], darkcolor=palette["border"])
     style.configure(
         "Horizontal.TProgressbar",
         background=palette["accent"],
-        troughcolor=palette["panel_alt"],
-        bordercolor=palette["panel_alt"],
+        troughcolor="#dbeafe",
+        bordercolor="#dbeafe",
         lightcolor=palette["accent"],
         darkcolor=palette["accent_dark"],
     )
-    style.configure("TCheckbutton", background=palette["panel"], foreground=palette["text"])
-    style.map("TCheckbutton", background=[("active", palette["panel"])])
+    style.configure("TCheckbutton", background=palette["panel_alt"], foreground=palette["text"])
+    style.map("TCheckbutton", background=[("active", palette["panel_alt"])])
     style.configure("TNotebook", background=palette["bg"], borderwidth=0)
-    style.configure("TNotebook.Tab", background=palette["surface"], foreground=palette["muted"], padding=(18, 9))
+    style.configure("TNotebook.Tab", background="#eef2ff", foreground=palette["text"], padding=(18, 9))
     style.map(
         "TNotebook.Tab",
-        background=[("selected", palette["panel"]), ("active", palette["border"])],
+        background=[("selected", palette["panel_alt"]), ("active", "#dbeafe")],
         foreground=[("selected", palette["text"]), ("active", palette["text"])],
     )
 
@@ -1394,7 +1398,6 @@ def launch_gui() -> int:
     mode_summary_var = tk.StringVar(value="skip existing trailers")
     running_var = tk.BooleanVar(value=False)
     cancel_event = threading.Event()
-    quit_after_cancel = {"value": False}
     log_queue: queue.Queue[object] = queue.Queue()
     busy_buttons: list[ttk.Button] = []
 
@@ -1408,12 +1411,85 @@ def launch_gui() -> int:
         if subtitle:
             ttk.Label(parent, text=subtitle, style="Tiny.TLabel").grid(row=1, column=0, sticky="w", pady=(2, 10))
 
+    def add_text_context_menu(widget, editable: bool = True) -> None:
+        menu = tk.Menu(widget, tearoff=0)
+
+        def has_selection() -> bool:
+            try:
+                if isinstance(widget, tk.Text):
+                    widget.index("sel.first")
+                    widget.index("sel.last")
+                    return True
+                return bool(widget.selection_present())
+            except tk.TclError:
+                return False
+
+        def copy_selection() -> None:
+            try:
+                if isinstance(widget, tk.Text):
+                    selected = widget.get("sel.first", "sel.last")
+                else:
+                    selected = widget.selection_get()
+                root.clipboard_clear()
+                root.clipboard_append(selected)
+            except tk.TclError:
+                pass
+
+        def cut_selection() -> None:
+            if not editable:
+                return
+            try:
+                widget.event_generate("<<Cut>>")
+            except tk.TclError:
+                pass
+
+        def paste_clipboard() -> None:
+            if not editable:
+                return
+            try:
+                widget.event_generate("<<Paste>>")
+            except tk.TclError:
+                pass
+
+        def select_all() -> None:
+            try:
+                if isinstance(widget, tk.Text):
+                    widget.tag_add("sel", "1.0", "end-1c")
+                    widget.mark_set("insert", "1.0")
+                    widget.see("insert")
+                else:
+                    widget.selection_range(0, "end")
+                    widget.icursor("end")
+            except tk.TclError:
+                pass
+
+        def show_menu(event) -> str:
+            try:
+                widget.focus_set()
+            except tk.TclError:
+                pass
+            menu.delete(0, "end")
+            if editable:
+                menu.add_command(label="Cut", command=cut_selection, state="normal" if has_selection() else "disabled")
+            menu.add_command(label="Copy", command=copy_selection, state="normal" if has_selection() else "disabled")
+            if editable:
+                menu.add_command(label="Paste", command=paste_clipboard)
+            menu.add_separator()
+            menu.add_command(label="Select All", command=select_all)
+            menu.tk_popup(event.x_root, event.y_root)
+            return "break"
+
+        widget.bind("<Button-3>", show_menu, add="+")
+        widget.bind("<Control-a>", lambda _event: (select_all(), "break")[1], add="+")
+
     def labeled_entry(parent, row: int, label: str, variable: tk.Variable, browse_command=None) -> None:
         ttk.Label(parent, text=label, style="Muted.TLabel").grid(row=row, column=0, sticky="w", pady=6, padx=(0, 12))
         holder = ttk.Frame(parent, style="Row.TFrame")
         holder.grid(row=row, column=1, sticky="ew", pady=6)
         holder.columnconfigure(0, weight=1)
-        ttk.Entry(holder, textvariable=variable).grid(row=0, column=0, sticky="ew")
+        entry = ttk.Entry(holder, textvariable=variable)
+        entry.grid(row=0, column=0, sticky="ew")
+        add_text_context_menu(entry)
         if browse_command:
             ttk.Button(holder, text="Browse", command=browse_command).grid(row=0, column=1, padx=(8, 0))
 
@@ -1422,7 +1498,7 @@ def launch_gui() -> int:
     shell.columnconfigure(0, weight=1)
     shell.rowconfigure(2, weight=1)
 
-    header = ttk.Frame(shell, style="App.TFrame")
+    header = ttk.Frame(shell, style="Nav.TFrame", padding=(18, 14))
     header.grid(row=0, column=0, sticky="ew")
     header.columnconfigure(0, weight=1)
     ttk.Label(header, text="Trailer Ops Console", style="Header.TLabel").grid(row=0, column=0, sticky="w")
@@ -1435,7 +1511,7 @@ def launch_gui() -> int:
     status_badge = tk.Label(
         header,
         textvariable=status_var,
-        bg=palette["accent_dark"],
+        bg=palette["good"],
         fg="#ecfeff",
         padx=14,
         pady=7,
@@ -1450,11 +1526,11 @@ def launch_gui() -> int:
     def summary_tile(column: int, label: str, value_var: tk.StringVar, accent: str) -> None:
         tile = ttk.Frame(summary, style="Panel.TFrame", padding=12)
         tile.grid(row=0, column=column, sticky="ew", padx=(0 if column == 0 else 8, 0 if column == 2 else 8))
-        tile.columnconfigure(1, weight=1)
-        marker = tk.Frame(tile, width=4, height=42, bg=accent, highlightthickness=0)
-        marker.grid(row=0, column=0, rowspan=2, sticky="nsw", padx=(0, 10))
-        ttk.Label(tile, text=label.upper(), style="Tiny.TLabel").grid(row=0, column=1, sticky="w")
-        ttk.Label(tile, textvariable=value_var, style="Value.TLabel").grid(row=1, column=1, sticky="w")
+        tile.columnconfigure(0, weight=1)
+        marker = tk.Frame(tile, width=44, height=4, bg=accent, highlightthickness=0)
+        marker.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        ttk.Label(tile, textvariable=value_var, style="Value.TLabel").grid(row=1, column=0, sticky="w")
+        ttk.Label(tile, text=label.upper(), style="Tiny.TLabel").grid(row=2, column=0, sticky="w", pady=(2, 0))
 
     summary_tile(0, "Library", root_summary_var, palette["accent"])
     summary_tile(1, "Cookies", cookie_summary_var, palette["good"])
@@ -1525,8 +1601,8 @@ def launch_gui() -> int:
 
     actions = ttk.Frame(run_tab, style="Panel.TFrame", padding=14)
     actions.grid(row=1, column=0, sticky="ew", pady=(12, 8))
-    actions.columnconfigure(4, weight=1)
-    ttk.Label(actions, text="Run controls", style="CardTitle.TLabel").grid(row=0, column=0, columnspan=5, sticky="w", pady=(0, 10))
+    actions.columnconfigure(5, weight=1)
+    ttk.Label(actions, text="Run controls", style="CardTitle.TLabel").grid(row=0, column=0, columnspan=6, sticky="w", pady=(0, 10))
 
     log_panel = ttk.Frame(run_tab, style="Panel.TFrame", padding=14)
     log_panel.grid(row=2, column=0, sticky="nsew")
@@ -1538,16 +1614,17 @@ def launch_gui() -> int:
         wrap="word",
         height=20,
         state="disabled",
-        bg=palette["panel_alt"],
+        bg="#f8f9fa",
         fg=palette["text"],
         insertbackground=palette["text"],
-        selectbackground=palette["accent_dark"],
+        selectbackground="#bfdbfe",
         relief="flat",
         padx=12,
         pady=12,
         font=("Consolas", 10),
     )
     log_text.grid(row=1, column=0, sticky="nsew")
+    add_text_context_menu(log_text, editable=False)
     scrollbar = ttk.Scrollbar(log_panel, orient="vertical", command=log_text.yview)
     scrollbar.grid(row=1, column=1, sticky="ns")
     log_text.configure(yscrollcommand=scrollbar.set)
@@ -1688,8 +1765,6 @@ def launch_gui() -> int:
                     progress_var.set(100)
                     set_status("Finished", "good")
                 update_summary()
-                if quit_after_cancel["value"]:
-                    root.after(50, root.destroy)
             elif isinstance(item, tuple) and len(item) == 4 and item[0] == "__PROGRESS__":
                 _kind, current, total, label = item
                 percent = 0 if not total else (float(current) / float(total)) * 100
@@ -1723,7 +1798,6 @@ def launch_gui() -> int:
         progress_text_var.set("Preparing")
         set_status("Running", "accent_dark")
         cancel_event.clear()
-        quit_after_cancel["value"] = False
         current["cancel_event"] = cancel_event
         running_var.set(True)
         for button in busy_buttons:
@@ -1851,13 +1925,23 @@ def launch_gui() -> int:
 
         threading.Thread(target=target, daemon=True).start()
 
-    def exit_or_cancel() -> None:
+    def cancel_task() -> None:
         if running_var.get():
-            quit_after_cancel["value"] = True
             cancel_event.set()
             set_status("Cancelling", "warn")
             progress_text_var.set("Cancelling current download")
             log_queue.put("\nCancel requested; stopping active download/conversion...\n")
+        else:
+            progress_text_var.set("No active task to cancel")
+
+    def exit_app() -> None:
+        if running_var.get():
+            answer = messagebox.askyesno(
+                "Task running",
+                "A task is currently running. Cancel it first and keep the app open?",
+            )
+            if answer:
+                cancel_task()
             return
         root.destroy()
 
@@ -1867,16 +1951,18 @@ def launch_gui() -> int:
     start_button.grid(row=1, column=1, sticky="w", padx=(8, 0))
     deps_button = ttk.Button(actions, text="Install / Repair Dependencies", command=dependency_worker)
     deps_button.grid(row=1, column=2, sticky="w", padx=(8, 0))
-    quit_button = ttk.Button(actions, text="Exit / Quit", style="Danger.TButton", command=exit_or_cancel)
-    quit_button.grid(row=1, column=3, sticky="w", padx=(8, 0))
+    cancel_button = ttk.Button(actions, text="Cancel Task", style="Danger.TButton", command=cancel_task)
+    cancel_button.grid(row=1, column=3, sticky="w", padx=(8, 0))
+    exit_button = ttk.Button(actions, text="Exit", command=exit_app)
+    exit_button.grid(row=1, column=4, sticky="w", padx=(8, 0))
     busy_buttons.extend([preview_button, start_button, deps_button])
     ttk.Label(actions, text="Default skips existing trailers; total re-download is in Settings.", style="Muted.TLabel").grid(
-        row=1, column=4, sticky="e"
+        row=1, column=5, sticky="e"
     )
     progress_bar = ttk.Progressbar(actions, variable=progress_var, mode="determinate", maximum=100)
-    progress_bar.grid(row=2, column=0, columnspan=5, sticky="ew", pady=(14, 4))
+    progress_bar.grid(row=2, column=0, columnspan=6, sticky="ew", pady=(14, 4))
     ttk.Label(actions, textvariable=progress_text_var, style="Muted.TLabel").grid(
-        row=3, column=0, columnspan=5, sticky="ew"
+        row=3, column=0, columnspan=6, sticky="ew"
     )
 
     search_panel = panel(settings_body, row=0, column=0, sticky="nsew", padx=(0, 8), pady=(0, 12))
@@ -1886,17 +1972,29 @@ def launch_gui() -> int:
         row=2, column=0, columnspan=2, sticky="w", pady=(2, 8)
     )
     ttk.Label(search_panel, text="Search results per query", style="Muted.TLabel").grid(row=3, column=0, sticky="w", pady=6)
-    ttk.Entry(search_panel, textvariable=search_results_var).grid(row=3, column=1, sticky="ew", pady=6)
+    search_results_entry = ttk.Entry(search_panel, textvariable=search_results_var)
+    search_results_entry.grid(row=3, column=1, sticky="ew", pady=6)
+    add_text_context_menu(search_results_entry)
     ttk.Label(search_panel, text="Maximum trailer length", style="Muted.TLabel").grid(row=4, column=0, sticky="w", pady=6)
-    ttk.Entry(search_panel, textvariable=max_duration_var).grid(row=4, column=1, sticky="ew", pady=6)
+    max_duration_entry = ttk.Entry(search_panel, textvariable=max_duration_var)
+    max_duration_entry.grid(row=4, column=1, sticky="ew", pady=6)
+    add_text_context_menu(max_duration_entry)
     ttk.Label(search_panel, text="Candidate attempts", style="Muted.TLabel").grid(row=5, column=0, sticky="w", pady=6)
-    ttk.Entry(search_panel, textvariable=candidate_attempts_var).grid(row=5, column=1, sticky="ew", pady=6)
+    candidate_attempts_entry = ttk.Entry(search_panel, textvariable=candidate_attempts_var)
+    candidate_attempts_entry.grid(row=5, column=1, sticky="ew", pady=6)
+    add_text_context_menu(candidate_attempts_entry)
     ttk.Label(search_panel, text="Delay between searches (seconds)", style="Muted.TLabel").grid(row=6, column=0, sticky="w", pady=6)
-    ttk.Entry(search_panel, textvariable=search_delay_var).grid(row=6, column=1, sticky="ew", pady=6)
+    search_delay_entry = ttk.Entry(search_panel, textvariable=search_delay_var)
+    search_delay_entry.grid(row=6, column=1, sticky="ew", pady=6)
+    add_text_context_menu(search_delay_entry)
     ttk.Label(search_panel, text="Download sleep min (seconds)", style="Muted.TLabel").grid(row=7, column=0, sticky="w", pady=6)
-    ttk.Entry(search_panel, textvariable=download_sleep_min_var).grid(row=7, column=1, sticky="ew", pady=6)
+    download_sleep_min_entry = ttk.Entry(search_panel, textvariable=download_sleep_min_var)
+    download_sleep_min_entry.grid(row=7, column=1, sticky="ew", pady=6)
+    add_text_context_menu(download_sleep_min_entry)
     ttk.Label(search_panel, text="Download sleep max (seconds)", style="Muted.TLabel").grid(row=8, column=0, sticky="w", pady=6)
-    ttk.Entry(search_panel, textvariable=download_sleep_max_var).grid(row=8, column=1, sticky="ew", pady=6)
+    download_sleep_max_entry = ttk.Entry(search_panel, textvariable=download_sleep_max_var)
+    download_sleep_max_entry.grid(row=8, column=1, sticky="ew", pady=6)
+    add_text_context_menu(download_sleep_max_entry)
 
     runtime_panel = panel(settings_body, row=1, column=0, sticky="nsew", padx=(0, 8))
     runtime_panel.columnconfigure(1, weight=1)
@@ -1917,15 +2015,25 @@ def launch_gui() -> int:
         command=update_summary,
     ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(2, 8))
     ttk.Label(runtime_panel, text="Process first N folders", style="Muted.TLabel").grid(row=5, column=0, sticky="w", pady=6)
-    ttk.Entry(runtime_panel, textvariable=limit_var).grid(row=5, column=1, sticky="ew", pady=6)
+    limit_entry = ttk.Entry(runtime_panel, textvariable=limit_var)
+    limit_entry.grid(row=5, column=1, sticky="ew", pady=6)
+    add_text_context_menu(limit_entry)
     ttk.Label(runtime_panel, text="Delay between movies (seconds)", style="Muted.TLabel").grid(row=6, column=0, sticky="w", pady=6)
-    ttk.Entry(runtime_panel, textvariable=movie_delay_var).grid(row=6, column=1, sticky="ew", pady=6)
+    movie_delay_entry = ttk.Entry(runtime_panel, textvariable=movie_delay_var)
+    movie_delay_entry.grid(row=6, column=1, sticky="ew", pady=6)
+    add_text_context_menu(movie_delay_entry)
     ttk.Label(runtime_panel, text="FFmpeg threads", style="Muted.TLabel").grid(row=7, column=0, sticky="w", pady=6)
-    ttk.Entry(runtime_panel, textvariable=ffmpeg_threads_var).grid(row=7, column=1, sticky="ew", pady=6)
+    ffmpeg_threads_entry = ttk.Entry(runtime_panel, textvariable=ffmpeg_threads_var)
+    ffmpeg_threads_entry.grid(row=7, column=1, sticky="ew", pady=6)
+    add_text_context_menu(ffmpeg_threads_entry)
     ttk.Label(runtime_panel, text="FFmpeg preset", style="Muted.TLabel").grid(row=8, column=0, sticky="w", pady=6)
-    ttk.Combobox(runtime_panel, textvariable=ffmpeg_preset_var, values=FFMPEG_PRESETS).grid(row=8, column=1, sticky="ew", pady=6)
+    ffmpeg_preset_combo = ttk.Combobox(runtime_panel, textvariable=ffmpeg_preset_var, values=FFMPEG_PRESETS)
+    ffmpeg_preset_combo.grid(row=8, column=1, sticky="ew", pady=6)
+    add_text_context_menu(ffmpeg_preset_combo)
     ttk.Label(runtime_panel, text="FFmpeg CRF", style="Muted.TLabel").grid(row=9, column=0, sticky="w", pady=6)
-    ttk.Entry(runtime_panel, textvariable=ffmpeg_crf_var).grid(row=9, column=1, sticky="ew", pady=6)
+    ffmpeg_crf_entry = ttk.Entry(runtime_panel, textvariable=ffmpeg_crf_var)
+    ffmpeg_crf_entry.grid(row=9, column=1, sticky="ew", pady=6)
+    add_text_context_menu(ffmpeg_crf_entry)
 
     def browse_results_file() -> None:
         selected = filedialog.asksaveasfilename(
@@ -1966,6 +2074,7 @@ def launch_gui() -> int:
         values=("edge", "chrome", "chromium", "firefox", "brave", "vivaldi", "opera"),
     )
     extract_combo.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+    add_text_context_menu(extract_combo)
     extract_button = ttk.Button(extract_row, text="Extract Cookies", command=extract_worker)
     extract_button.grid(row=0, column=1)
     busy_buttons.append(extract_button)
@@ -1973,14 +2082,18 @@ def launch_gui() -> int:
     ttk.Label(cookies_panel, text="Direct fallback", style="Muted.TLabel").grid(row=4, column=0, sticky="w", pady=6)
     cookies_combo = ttk.Combobox(cookies_panel, textvariable=cookies_var, values=("", "edge", "chrome", "firefox"))
     cookies_combo.grid(row=4, column=1, sticky="ew", pady=6)
+    add_text_context_menu(cookies_combo)
     cookies_combo.bind("<<ComboboxSelected>>", lambda _event: update_summary())
 
     ttk.Label(cookies_panel, text="JS runtime", style="Muted.TLabel").grid(row=5, column=0, sticky="w", pady=6)
     js_runtime_combo = ttk.Combobox(cookies_panel, textvariable=js_runtime_var, values=("", "node", "deno", "quickjs"))
     js_runtime_combo.grid(row=5, column=1, sticky="ew", pady=6)
+    add_text_context_menu(js_runtime_combo)
 
     ttk.Label(cookies_panel, text="Remote EJS components", style="Muted.TLabel").grid(row=6, column=0, sticky="w", pady=6)
-    ttk.Entry(cookies_panel, textvariable=remote_components_var).grid(row=6, column=1, sticky="ew", pady=6)
+    remote_components_entry = ttk.Entry(cookies_panel, textvariable=remote_components_var)
+    remote_components_entry.grid(row=6, column=1, sticky="ew", pady=6)
+    add_text_context_menu(remote_components_entry)
 
     ttk.Label(cookies_panel, text="Settings file", style="Muted.TLabel").grid(row=7, column=0, sticky="w", pady=(18, 4))
     ttk.Label(cookies_panel, text=str(SETTINGS_PATH), style="Tiny.TLabel", wraplength=430).grid(

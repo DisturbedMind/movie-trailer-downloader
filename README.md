@@ -3,9 +3,23 @@ Movie trailer downloader
 
 Install requirements:
 
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+
+The installer checks what is missing, uses winget first, falls back to
+Chocolatey when needed, and installs/updates:
+
+    Python 3.14
+    yt-dlp[default]
+    FFmpeg
+    Deno
+
     python -m pip install -U yt-dlp
     winget install Gyan.FFmpeg
     winget install DenoLand.Deno
+
+Manual install commands are still shown above for troubleshooting, but the
+preferred setup path is install.ps1. In the GUI, use the Run tab button named
+"Install / Repair Dependencies".
 
 FFmpeg must be available on PATH for the preferred output pipeline. The script
 downloads the best available video/audio that yt-dlp can access, then converts
@@ -46,7 +60,32 @@ Open the GUI:
 
     python movie_trailer_downloader.py --gui
 
+GUI controls:
+
+    Preview
+        Run without downloading or renaming.
+
+    Download
+        Start the trailer scan/download run.
+
+    Install / Repair Dependencies
+        Check and install missing tools with install.ps1.
+
+    Cancel Task
+        Cancels the current yt-dlp/FFmpeg operation, restores any .old trailer
+        backup, cleans the temp folder, and keeps the app open.
+
+    Exit
+        Closes the app when idle. If a task is running, asks whether to cancel
+        the active task first and keeps the app open.
+
 Useful options:
+
+    --check-deps
+        Print dependency status and exit.
+
+    --install-deps
+        Run the bundled install.ps1 dependency bootstrapper and exit.
 
     --include-vevo
         Add VEVO-flavoured searches where available.
