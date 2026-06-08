@@ -246,6 +246,16 @@ Before downloading, existing trailer files are temporarily preserved:
 Matching .old trailer backups are deleted on rerun, and any backup created
 during the current run is deleted after a new trailer downloads successfully.
 
+Open or locked files:
+
+    If Windows reports that an existing trailer is open in another program, the
+    script skips that movie, continues with the rest of the queue, then retries
+    the skipped movie once after the first pass is finished.
+
+    If the file is still locked on the retry, the movie is skipped cleanly and
+    the run finishes. Close the player or file browser preview that is using
+    the trailer, then run the downloader again.
+
 Notes:
 
     The script uses yt-dlp searches against public/free sources. YouTube is the

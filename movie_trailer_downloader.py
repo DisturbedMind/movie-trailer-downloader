@@ -130,6 +130,13 @@ class Candidate:
     score: int
 
 
+class LockedFileSkipped(Exception):
+    def __init__(self, path: Path, action: str):
+        self.path = path
+        self.action = action
+        super().__init__(f"{path.name} is open or locked while trying to {action}")
+
+
 def normalise_words(text: str) -> set[str]:
     return {w for w in re.findall(r"[a-z0-9]+", text.lower()) if len(w) > 2}
 
@@ -430,6 +437,10 @@ def unique_path(path: Path) -> Path:
         counter += 1
 
 
+def is_file_access_error(exc: OSError) -> bool:
+    return isinstance(exc, PermissionError) or getattr(exc, "winerror", None) in {5, 32, 33}
+
+
 def is_matching_trailer_backup(movie: MovieFolder, item: Path) -> bool:
     prefix = f"{movie.display_name}-trailer".lower()
     lower_name = item.name.lower()
@@ -441,9 +452,17 @@ def delete_old_trailer_backups(movie: MovieFolder, dry_run: bool) -> list[Path]:
     for item in sorted(movie.folder.iterdir(), key=lambda p: p.name.lower()):
         if not is_matching_trailer_backup(movie, item):
             continue
-        deleted.append(item)
-        if not dry_run:
+        if dry_run:
+            deleted.append(item)
+            continue
+        try:
             item.unlink()
+        except OSError as exc:
+            if is_file_access_error(exc):
+                print(f"  skipped locked backup: {item.name} ({exc})")
+                continue
+            raise
+        deleted.append(item)
     return deleted
 
 
@@ -468,8 +487,15 @@ def restore_renamed_trailers(renamed: list[tuple[Path, Path]]) -> list[tuple[Pat
     restored: list[tuple[Path, Path]] = []
     for original, backup in renamed:
         if backup.exists() and not original.exists():
-            backup.rename(original)
-            restored.append((backup, original))
+            try:
+                backup.rename(original)
+            except OSError as exc:
+                if is_file_access_error(exc):
+                    print(f"    could not restore locked backup: {backup.name} ({exc})")
+                    continue
+                raise
+            else:
+                restored.append((backup, original))
     return restored
 
 
@@ -489,9 +515,17 @@ def rename_existing_trailers(movie: MovieFolder, dry_run: bool) -> list[tuple[Pa
             continue
 
         target = unique_path(item.with_name(f"{item.name}.old"))
-        renamed.append((item, target))
-        if not dry_run:
+        if dry_run:
+            renamed.append((item, target))
+            continue
+        try:
             item.rename(target)
+        except OSError as exc:
+            if is_file_access_error(exc):
+                restore_renamed_trailers(renamed)
+                raise LockedFileSkipped(item, "rename it for re-download") from exc
+            raise
+        renamed.append((item, target))
 
     return renamed
 
@@ -947,12 +981,24 @@ def download_candidate(
             crf=ffmpeg_crf,
             cancel_event=cancel_event,
         )
-        shutil.move(str(converted), str(target))
+        try:
+            shutil.move(str(converted), str(target))
+        except OSError as move_exc:
+            if is_file_access_error(move_exc):
+                raise LockedFileSkipped(target, "save the normalized trailer") from move_exc
+            raise
+    except LockedFileSkipped:
+        raise
     except Exception as exc:
         print(f"    FFmpeg conversion failed: {exc}")
         print("    saving the original downloaded file instead")
         target = unique_path(movie.folder / downloaded.name)
-        shutil.move(str(downloaded), str(target))
+        try:
+            shutil.move(str(downloaded), str(target))
+        except OSError as move_exc:
+            if is_file_access_error(move_exc):
+                raise LockedFileSkipped(target, "save the downloaded trailer") from move_exc
+            raise
     return target
 
 
@@ -1205,6 +1251,7 @@ def run_cli(args: argparse.Namespace) -> int:
     if progress_callback:
         progress_callback(0, len(movies), "Starting")
     movie_delay = float(getattr(args, "movie_delay", DEFAULT_MOVIE_DELAY))
+    locked_retry_queue: list[MovieFolder] = []
     for index, movie in enumerate(movies, start=1):
         try:
             check_cancel(getattr(args, "cancel_event", None))
@@ -1212,11 +1259,34 @@ def run_cli(args: argparse.Namespace) -> int:
         except CancelledByUser:
             print("\nRun cancelled by user")
             return 130
+        except LockedFileSkipped as exc:
+            print(f"  skipped: {exc}. Will retry this movie after the queue finishes.")
+            locked_retry_queue.append(movie)
+            changed = False
         if changed or not args.dry_run:
             save_results(results_file, results)
         if progress_callback:
             progress_callback(index, len(movies), movie.display_name)
         if index < len(movies) and movie_delay > 0 and getattr(args, "_last_movie_used_network", False):
+            polite_sleep(movie_delay)
+
+    if locked_retry_queue:
+        print(f"\nRetrying {len(locked_retry_queue)} movie(s) that had open or locked files...")
+    for retry_index, movie in enumerate(locked_retry_queue, start=1):
+        try:
+            check_cancel(getattr(args, "cancel_event", None))
+            changed = process_movie(movie, args, ydl_base_opts, results)
+        except CancelledByUser:
+            print("\nRun cancelled by user")
+            return 130
+        except LockedFileSkipped as exc:
+            print(f"  skipped after retry: {exc}. Close the app using that file and run again later.")
+            changed = False
+        if changed or not args.dry_run:
+            save_results(results_file, results)
+        if progress_callback:
+            progress_callback(len(movies), len(movies), f"Retry {retry_index}: {movie.display_name}")
+        if retry_index < len(locked_retry_queue) and movie_delay > 0 and getattr(args, "_last_movie_used_network", False):
             polite_sleep(movie_delay)
 
     return 0
