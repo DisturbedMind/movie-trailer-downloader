@@ -1,6 +1,24 @@
 Movie trailer downloader
 ========================
 
+![Moonlit wolf banner](assets/wolf-banner.png)
+
+A polite little workhorse for home-cinema libraries: this tool searches public
+trailer sources, downloads one trailer per movie, converts it to a clean MP4
+when FFmpeg is available, and places it exactly where media servers expect to
+find it.
+
+It is especially useful for Emby, Plex, and Jellyfin libraries because it saves
+trailers beside the movie using the familiar local trailer naming pattern:
+
+    C:\movies\Movie (2026)\Movie (2026)-trailer.mp4
+
+That means your media server can discover the trailer from the movie folder
+instead of relying on online metadata, plugins, or whatever mood the internet
+is in that day. It also keeps the library restartable: existing trailers are
+skipped by default, successful downloads are remembered, and total re-download
+mode is available when you want to refresh everything.
+
 Install requirements:
 
     powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
